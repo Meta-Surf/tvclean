@@ -15,7 +15,7 @@ import java.io.IOException;
 
 /**
  * Where tools/photos.py writes a photo when the TV doesn't let adb into the app's external folder (Android 11, and
- * Fire OS 8 on it): `adb exec-in content write --uri content://io.freemytv.photos/<name>?size=<bytes>`. Only adb's
+ * Fire OS 8 on it): `adb exec-in content write --uri content://cloud.ofertanoradar.tvclean.photos/<name>?size=<bytes>`. Only adb's
  * shell (or root) may write; the photo lands in Photos' private inbox and is imported (and deleted) the next time the
  * home screen, the screensaver or the settings open.
  */
@@ -41,7 +41,7 @@ public class PhotoInbox extends ContentProvider {
         if (caller != SHELL_UID && caller != 0) throw new SecurityException("only adb sends photos");
         String name = uri.getLastPathSegment();
         if (name == null || name.isEmpty() || name.contains("/") || name.startsWith(".") || !mode.contains("w")) {
-            throw new FileNotFoundException("photos only: content://io.freemytv.photos/<name>");
+            throw new FileNotFoundException("photos only: content://cloud.ofertanoradar.tvclean.photos/<name>");
         }
         File in = Photos.privateInbox(getContext());
         if (!in.isDirectory() && !in.mkdirs()) throw new FileNotFoundException("can't create " + in);
