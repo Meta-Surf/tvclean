@@ -3357,11 +3357,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         radarOffers.setFrozen(true);
         android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity)
                 .setTitle("Oferta no Radar · Publicidade")
-                .setMessage(o.title + "\\n" + o.store
-                        + (o.price == null ? "" : "\\n" + o.price)
-                        + "\\nPreço e disponibilidade sujeitos a alteração."
-                        + (o.clickUrl == null ? "\\nOferta demonstrativa: sem link para compra."
-                                : "\\nEscaneie com o celular para acessar a loja."))
+                .setMessage(o.title + "\n" + o.store
+                        + (o.price == null ? "" : "\n" + o.price)
+                        + "\nPreço e disponibilidade sujeitos a alteração."
+                        + (o.clickUrl == null ? "\nOferta demonstrativa: sem link para compra."
+                                : "\nEscaneie com o celular para acessar a loja."))
                 .setPositiveButton("Fechar", (dialog, which) -> dialog.dismiss());
         if (o.clickUrl != null) {
             try {
