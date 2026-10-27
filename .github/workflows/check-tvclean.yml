@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: tvclean-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,3 +31,18 @@ jobs:
           echo "ANDROID_HOME=$RUNNER_TEMP/sdk" >> "$GITHUB_ENV"
       - name: Compile Android launcher
         run: tools/check.sh android
+      - name: Verify unique TVClean package and prepare preview
+        run: |
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging FreeMyTV.apk | grep -F "package: name='cloud.ofertanoradar.tvclean'"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify FreeMyTV.apk
+          cp FreeMyTV.apk TVClean-preview.apk
+          sha256sum TVClean-preview.apk > TVClean-preview.apk.sha256
+      - name: Upload internal testing APK (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVClean-preview-AndroidTV
+          path: |
+            TVClean-preview.apk
+            TVClean-preview.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
