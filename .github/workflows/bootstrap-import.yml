@@ -1,0 +1,42 @@
+# Bootstrap do TVClean sem depender de computador local.
+# O repositório de destino deve estar recém-criado e sem código próprio.
+name: Importar base Free My TV
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-import.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: github.repository == 'Meta-Surf/tvclean'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório TVClean
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Importar upstream preservando histórico e licença
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/simbasjungles/free-my-tv.git
+          git fetch upstream main
+          if [ -f app/src/io/freemytv/HomeView.java ]; then
+            echo "A base já foi importada; operação idempotente."
+            exit 0
+          fi
+          git merge --allow-unrelated-histories --no-edit --no-ff upstream/main \
+            -m "Import Free My TV upstream with full history (MIT)"
+          test -f LICENSE
+          test -f app/src/io/freemytv/HomeView.java
+          git push origin HEAD:main
