@@ -25,8 +25,8 @@ import javax.net.ssl.HttpsURLConnection;
  * Runs HTTP and image decoding off the Android UI thread.
  */
 final class RadarOffers {
-    static final String ENDPOINT = "https://tv.ofertanoradar.cloud/api/v1/offers/current";
-    private static final String CLICK_PREFIX = "https://tv.ofertanoradar.cloud/oferta/";
+    static final String ENDPOINT = "https://midia.ofertanoradar.cloud/tv/api/v1/offers/current";
+    private static final String CLICK_PREFIX = "https://midia.ofertanoradar.cloud/tv/oferta/";
     private static final long ROTATE_MS = 600_000L;
     private static final long RETRY_MS = 120_000L;
     private static final long REFRESH_MS = 60_000L;
@@ -199,7 +199,7 @@ final class RadarOffers {
         if (price != null && !price.matches("R\\$ [0-9.]{1,12},[0-9]{2}")) price = null;
         String clickUrl = o.optString("click_url", "");
         if (demo) { clickUrl = null; price = null; }
-        else if (!clickUrl.startsWith(CLICK_PREFIX) || clickUrl.length() > 200 || !safeHttps(clickUrl, "tv.ofertanoradar.cloud"))
+        else if (!clickUrl.startsWith(CLICK_PREFIX) || clickUrl.length() > 200 || !safeHttps(clickUrl, "midia.ofertanoradar.cloud"))
             return null;
         String imageUrl = o.optString("image_url", "");
         if (!safeHttps(imageUrl, "midia.ofertanoradar.cloud")) imageUrl = null;
