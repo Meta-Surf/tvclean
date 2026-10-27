@@ -1981,6 +1981,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         statusDirty |= snap || statusChanged;
         heroDirty |= snap || heroChanged;
         drawerDirty |= snap || drawerChanged;
+        radarOffers.setFrozen(radarDialogOpen || (tab == 0 && zone == Z_CARDS && cardIndex == 2));
         spoken.focusMoved();
     }
 
@@ -3332,6 +3333,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         RadarOffers.Offer o = radarOffers.current();
         if (o == null || !o.valid(System.currentTimeMillis())) return;
         radarDialogOpen = true;
+        radarOffers.setFrozen(true);
         android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity)
                 .setTitle("Oferta no Radar · Publicidade")
                 .setMessage(o.title + "\\n" + o.store
@@ -3366,7 +3368,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         android.app.AlertDialog dialog = b.create();
-        dialog.setOnDismissListener(d -> radarDialogOpen = false);
+        dialog.setOnDismissListener(d -> {
+            radarDialogOpen = false;
+            radarOffers.setFrozen(tab == 0 && zone == Z_CARDS && cardIndex == 2);
+        });
         try { dialog.show(); }
         catch (RuntimeException error) { radarDialogOpen = false; }
     }
