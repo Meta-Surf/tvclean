@@ -45,7 +45,7 @@ final class HomeMode {
 
     /**
      * Fire TV (Fire OS): Amazon's launcher keeps the Home button (`priority=950` on `CATEGORY_HOME`), so the switch
-     * refuses Free My TV mode while Original and the watchdog still run.
+     * refuses TVClean mode while Original and the watchdog still run.
      */
     static final boolean AMAZON = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
 
@@ -68,7 +68,7 @@ final class HomeMode {
     static final String HTC_HOME = "com.htc.htclauncherhighenglishd08";
 
     /**
-     * Turned off in Free My TV mode, when the TV has them. Google extras first, then TV-maker extras (TCL here; add
+     * Turned off in TVClean mode, when the TV has them. Google extras first, then TV-maker extras (TCL here; add
      * your brand's, see the README). The TV's own home screen and screensaver are added at switch time.
      */
     static final String[] DEBLOAT = {
@@ -239,21 +239,21 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.REVERT, null, 0);
     }
 
-    /** After the TV boots (and after a TV update): wait for the system to settle and check Free My TV mode. */
+    /** After the TV boots (and after a TV update): wait for the system to settle and check TVClean mode. */
     static void bootCheck(Context c) {
         if (AMAZON) return;
         ensureRemoteService(c, 30_000);
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
     }
 
-    /** After an update of this app: complete Free My TV mode if anything is missing. */
+    /** After an update of this app: complete TVClean mode if anything is missing. */
     static void verify(Context c) {
         ModeJob.schedule(c, ModeJob.VERIFY, null, 0);
     }
 
     /**
      * The remote's app buttons (RemoteKeys) need an accessibility service that only filters those keys. It is on only
-     * on TCL, Vestel, KTC, Sony, Xiaomi and Hisense TVs (and Formovie projectors) in Free My TV mode, and goes off with Original. Android turns it off when this app is updated, so the
+     * on TCL, Vestel, KTC, Sony, Xiaomi and Hisense TVs (and Formovie projectors) in TVClean mode, and goes off with Original. Android turns it off when this app is updated, so the
      * boot check and an update turn it back on. A change in Remote Buttons asks again: with every button on Nothing,
      * and on TCL's Android 11, it goes off (RemoteKeys.serviceWanted).
      */
@@ -307,7 +307,7 @@ final class HomeMode {
 
     /**
      * Home Settings' Now Playing widget reads what apps play through our notification listener, which could read every
-     * notification (ours never does): it's allowed only while the widget is on, in Free My TV mode, and taken back when
+     * notification (ours never does): it's allowed only while the widget is on, in TVClean mode, and taken back when
      * the widget goes off, by Original and by the watchdog's revert. Asked when the widget changes and by a screen that
      * finds it on but not allowed; this process sets it to what the widget says at that moment, so the order the
      * requests run in doesn't matter.
@@ -477,7 +477,7 @@ final class HomeMode {
                     AppLog.w("remote buttons service: " + e.getMessage());
                 }
             }
-            notice(c, Ui.trf("Free My TV is on: new home screen and screensaver, {n} apps turned off.", "n", disabled.size()));
+            notice(c, Ui.trf("TVClean is on: new home screen and screensaver, {n} apps turned off.", "n", disabled.size()));
             busy(c, Ui.tr("Measuring Free My TV…"));
             measure(c, adb, FREE, false);
             done(c, null);
@@ -649,7 +649,7 @@ final class HomeMode {
                 }
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
-                notice(app, Ui.tr("Free My TV's home screen crashed 3 times in a row; I switched back to the original one."));
+                notice(app, Ui.tr("TVClean's home screen crashed 3 times in a row; I switched back to the original one."));
                 adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             } catch (Exception e) {
                 AppLog.w("could not give the home screen back: " + e.getMessage());
@@ -658,7 +658,7 @@ final class HomeMode {
     }
 
     /**
-     * In Free My TV mode, checks that everything is still as we left it (the listed apps off, our home screen and
+     * In TVClean mode, checks that everything is still as we left it (the listed apps off, our home screen and
      * screensaver) and completes whatever is missing, with a notice. Runs after the TV boots (TV updates can turn
      * things back on) and after an update of this app.
      */
