@@ -383,6 +383,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         click = new Click(a);
         radarOffers = new RadarOffers(() -> {
             if (!running) return;
+            if (zone == Z_CARDS && cardIndex >= visibleCardCount()) {
+                zone = Z_SHELF;  // Expired offer must not leave focus on an empty slot.
+                retarget(false);
+            }
             heroDirty = true;
             wake();
             spoken.focusMoved();
@@ -3325,7 +3329,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Paint product = Ui.text(Ui.semibold, 27 * k, 0xFFFFFFFF);
         Paint detail = Ui.text(Ui.medium, 24 * k, 0xFFFFFFFF);
         float x = cell.left + 16 * k, maxW = Math.max(20 * k, cell.width() - 32 * k);
-        c.drawText("PUBLICIDADE · OFERTA NO RADAR", x,
+        c.drawText("PUBLICIDADE", x,
                 cell.bottom - 120 * k, heading);
         fitPaint.set(product);
         c.drawText(TextUtils.ellipsize(o.title, fitPaint, maxW, TextUtils.TruncateAt.END).toString(),
