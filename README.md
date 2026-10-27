@@ -1,3 +1,7 @@
+> **TVClean — versão independente em desenvolvimento.** Este repositório adapta o projeto [Free My TV](https://github.com/simbasjungles/free-my-tv), sob licença MIT e com histórico preservado. Não é um lançamento oficial do Free My TV. Nosso MVP acrescenta um espaço identificado de publicidade “Oferta no Radar” para Smart TVs. As ofertas ainda são demonstrativas, sem links comerciais; nenhum APK TVClean pronto para distribuição foi publicado. Consulte [o plano técnico](docs/TVCLEAN_MVP.md) e a [PR de implementação](https://github.com/Meta-Surf/tvclean/pull/1).
+
+---
+
 <div align="center">
 
 <img src="docs/assets/icon-512.png" width="96" alt="">

@@ -43,16 +43,16 @@ import java.security.MessageDigest;
 final class Updates {
     private Updates() {}
 
-    private static final String LATEST = "https://api.github.com/repos/simbasjungles/free-my-tv/releases/latest";
+    private static final String LATEST = "https://api.github.com/repos/Meta-Surf/tvclean/releases/latest";
     // The only place the APK may come from: this repository's releases (github.com redirects to its download host).
-    private static final String RELEASES = "https://github.com/simbasjungles/free-my-tv/releases/download/";
+    private static final String RELEASES = "https://github.com/Meta-Surf/tvclean/releases/download/";
     // The release key's certificate, as `apksigner verify --print-certs` shows it: only APKs signed with it come in.
-    private static final String RELEASE_CERT = "b85d4ff69cb42bfb1837ee0279506363954470b16402a4165f2f095886d19204";
-    private static final String ASSET = "FreeMyTV.apk";
+    private static final String RELEASE_CERT = ""; // Block release installs until TVClean signing is configured.
+    private static final String ASSET = "TVClean.apk";
     private static final long MAX_SIZE = 30L << 20;   // the APK is about 1.5 MB
     private static final long WEEK = 7 * 24 * 3600_000L;
     static final int JOB = 2900;
-    static final String ACTION = "io.freemytv.UPDATE_STATUS";
+    static final String ACTION = "cloud.ofertanoradar.tvclean.UPDATE_STATUS";
 
     // What the last check found (update.json's "state"; "at" is when it was written, every few seconds while a
     // download runs).
@@ -179,7 +179,7 @@ final class Updates {
             out.write(v.getBytes(StandardCharsets.UTF_8));
         } catch (IOException ignored) {
         }
-        Toast.makeText(a, Ui.trf("Free My TV {version} is ready: Home Settings > Updates.", "version", v), Toast.LENGTH_LONG).show();
+        Toast.makeText(a, Ui.trf("TVClean {version} is ready: Home Settings > Updates.", "version", v), Toast.LENGTH_LONG).show();
     }
 
     // MARK: - Check and download
@@ -450,7 +450,7 @@ final class Updates {
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         h.setConnectTimeout(10000);
         h.setReadTimeout(30000);
-        h.setRequestProperty("User-Agent", "FreeMyTV");
+        h.setRequestProperty("User-Agent", "TVClean");
         return h;
     }
 

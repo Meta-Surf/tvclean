@@ -1,0 +1,48 @@
+name: TVClean Android MVP build
+
+on:
+  push:
+    branches: [feature/oferta-no-radar-mvp]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tvclean-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Build Android TV (development only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$RUNNER_TEMP/sdk" \
+            "build-tools;34.0.0" "platforms;android-34" > /dev/null
+          echo "ANDROID_HOME=$RUNNER_TEMP/sdk" >> "$GITHUB_ENV"
+      - name: Compile Android launcher
+        run: tools/check.sh android
+      - name: Verify unique TVClean package and prepare preview
+        run: |
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging FreeMyTV.apk | grep -F "package: name='cloud.ofertanoradar.tvclean'"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify FreeMyTV.apk
+          cp FreeMyTV.apk TVClean-preview.apk
+          sha256sum TVClean-preview.apk > TVClean-preview.apk.sha256
+      - name: Upload internal testing APK (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVClean-preview-AndroidTV
+          path: |
+            TVClean-preview.apk
+            TVClean-preview.apk.sha256
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-27T00:00:00Z",
+  "rotation_seconds": 600,
+  "offers": [
+    {
+      "id": "demo-001",
+      "kind": "demo",
+      "title": "Produto demonstrativo — nenhuma compra disponível",
+      "store": "TVClean",
+      "price_brl": null,
+      "price_verified_at": null,
+      "expires_at": null,
+      "image_url": null,
+      "click_url": null,
+      "disclosure": "Espaço publicitário · Oferta no Radar"
+    }
+  ]
+}

@@ -110,6 +110,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Recs recs;
     private final NowPlaying.Watch playing;
     private final Click click;
+    private final RadarOffers radarOffers;
+    private boolean radarDialogOpen;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences ui;
     private final TvInputManager tvInputs;
@@ -362,6 +364,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             playing.start();   // the listener allowed after the screen showed (a no-op once watching)
             data.refreshIfStale();
             recs.refreshIfStale();
+            radarOffers.tick(radarDialogOpen || (zone == Z_CARDS && radarCard(cardIndex)));
             checkNotices();
             updatePalette();
             checkNight(true);
@@ -378,6 +381,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs = Recs.get(a);
         playing = new NowPlaying.Watch(a, this::onPlaying);
         click = new Click(a);
+        radarOffers = new RadarOffers(() -> {
+            if (!running) return;
+            if (zone == Z_CARDS && cardIndex >= visibleCardCount()) {
+                zone = Z_SHELF;  // Expired offer must not leave focus on an empty slot.
+                retarget(false);
+            }
+            heroDirty = true;
+            wake();
+            spoken.focusMoved();
+        });
         shelfVisible = HomeApps.shelfVisible(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
         tvInputs = (TvInputManager) a.getSystemService(Context.TV_INPUT_SERVICE);
@@ -401,7 +414,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
             addView(v);
         }
-        setContentDescription("Free My TV");
+        setContentDescription("TVClean");
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < topFocus.length; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
@@ -447,6 +460,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs.addListener(this);
         data.refreshIfStale();
         recs.refreshIfStale();
+        radarOffers.tick(false);
         Photos.importInbox(getContext(), ownReady);   // photos a computer just sent
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
@@ -489,6 +503,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     void destroy() {
         pause();
+        radarOffers.close();
         if (launcherApps != null) launcherApps.unregisterCallback(packages);
         click.release();
     }
@@ -1970,6 +1985,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         statusDirty |= snap || statusChanged;
         heroDirty |= snap || heroChanged;
         drawerDirty |= snap || drawerChanged;
+        radarOffers.setFrozen(radarDialogOpen || (zone == Z_CARDS && radarCard(cardIndex)));
         spoken.focusMoved();
     }
 
@@ -2477,6 +2493,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
         } else if (zone == Z_CARDS) {
+            if (radarCard(cardIndex)) {
+                click.open();
+                openRadarOffer();
+                return;
+            }
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
             if (p == null || p.pkg == null) return;
             it = HomeApps.app(p.pkg, Recs.serviceName(p), p.link);
@@ -2759,7 +2780,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         for (int i = picksOn() ? 0 : 3; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
-        for (int i = 0; i < Math.min(Recs.MAX_CARDS, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
+        for (int i = 0; i < Math.min(Recs.MAX_CARDS, visibleCardCount()); i++) out.add(a11yId(Z_CARDS, i));
         for (int i = shelfFirst; i < Math.min(shelf.size(), shelfFirst + shelfVisible); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
         if (drawerOpen && Prefs.weather()) out.add(a11yId(WIDGETS, 0));
@@ -2775,7 +2796,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_TOP:
                 if (i >= 3) return label(lightButtons, i - 3);
                 return Ui.trf("{name}, tab {i} of {n}", "name", tabs()[i], "i", i + 1, "n", 3);
-            case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
+            case Z_CARDS: return radarCard(i) ? "Publicidade. Oferta no Radar. " + radarOffers.current().title + ". Pressione OK para detalhes." : i < cards.size() ? pickText(cards.get(i)) : "";
             case Z_SHELF:
                 if (reordering && i == shelfIndex) {
                     return Ui.trf("Moving {app}, position {n} of {total}",
@@ -2811,7 +2832,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 dy = (i < 3 ? heroLayer : status).getTranslationY();
                 break;
             case Z_CARDS:
-                if (i >= Math.min(Recs.MAX_CARDS, cards.size())) return false;
+                if (i >= Math.min(Recs.MAX_CARDS, visibleCardCount())) return false;
                 a11yRect.set(cardRects[i]);
                 dy = heroLayer.getTranslationY();
                 break;
@@ -2845,7 +2866,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (sheetOpen) return others.isEmpty() ? -1 : a11yId(GRID, gridIndex);
         switch (zone) {
             case Z_TOP: return a11yId(Z_TOP, topIndex);
-            case Z_CARDS: return cardIndex < cards.size() ? a11yId(Z_CARDS, cardIndex) : -1;
+            case Z_CARDS: return cardIndex < visibleCardCount() ? a11yId(Z_CARDS, cardIndex) : -1;
             case Z_SHELF: return shelf.isEmpty() ? -1 : a11yId(Z_SHELF, shelfIndex);
             case Z_DRAWER: return drawerItems.isEmpty() ? -1 : a11yId(Z_DRAWER, drawerIndex);
             case WIDGETS: return a11yId(WIDGETS, widgetIndex);
@@ -2899,7 +2920,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (i < 3) selectTab(i);
                 break;
             case Z_CARDS:
-                if (i >= cards.size()) return;
+                if (i >= visibleCardCount()) return;
                 if (drawerOpen) closeDrawer();
                 cardIndex = i;
                 break;
@@ -3004,6 +3025,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** The cards side by side: the one at cardIndex wide, the others tall, sliding as `cardOpen` moves. */
     private void layoutCards() {
+        if (!picksOn() && radarCard(0)) {
+            // Clock-mode users still see the offer, on the right without covering the clock.
+            cardRects[0].set((CONTENT_R - L_TALL_W) * k, L_CARDS_TOP * k,
+                    CONTENT_R * k, (L_CARDS_TOP + L_CARD_H) * k);
+            snap(cardRects[0]);
+            return;
+        }
         float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, tall = L_TALL_W * k;
         float wide = (CONTENT_R - MARGIN) * k - 2 * tall - 2 * g, x = MARGIN * k - cardScroll.value * (tall + g);
         for (int i = 0; i < Recs.MAX_CARDS; i++) {
@@ -3021,7 +3049,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (!samePicks(list, cards)) {
             cards = list;
             cardIndex = Math.min(cardIndex, Math.max(0, list.size() - 1));
-            if (zone == Z_CARDS && list.isEmpty()) zone = Z_SHELF;
+            if (zone == Z_CARDS && visibleCardCount() == 0) zone = Z_SHELF;
             retarget(false);   // the wide card and the scroll follow the clamped index, whatever has the focus
         }
         // This tab's cards, then the first three of the others (what shows at first): switching tabs is quick, and
@@ -3094,7 +3122,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightTop(Canvas c) {
         applyTone();
         if (!picksOn()) {
+            layoutCards();
             drawClock(c);
+            if (radarCard(0)) drawRadarCard(c, 0);
             if (HomeData.coinCount() > 0 || playingTab != null) drawQuotes(c);
             return;
         }
@@ -3126,7 +3156,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         layoutCards();
         int top = -1;
-        int slots = cardSlots;   // the others aren't drawn: at 3, no card peeks in at the right edge
+        int slots = Math.min(cardSlots, visibleCardCount());   // only show real recommendations and the ad slot
         for (int i = 0; i < slots; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
         for (int i = 0; i < slots; i++) if (i != top) drawLightCard(c, i);
         if (top >= 0) drawLightCard(c, top);
@@ -3163,6 +3193,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * card, genre · runtime · service).
      */
     private void drawLightCard(Canvas c, int i) {
+        if (radarCard(i)) {
+            drawRadarCard(c, i);
+            return;
+        }
         RectF base = cardRects[i];
         if (base.right < 0 || base.left > getWidth()) return;   // slid off screen
         Recs.Pick p = i < cards.size() ? cards.get(i) : null;
@@ -3236,6 +3270,137 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
+
+    /** Reserve slot 3 whenever possible; without TMDB recommendations use a reachable standalone card. */
+    private int radarSlot() {
+        if (tab != 0 || radarOffers.current() == null) return -1;
+        return picksOn() ? Math.min(2, cards.size()) : 0;
+    }
+
+    private int visibleCardCount() {
+        int n = picksOn() ? cards.size() : 0;
+        int slot = radarSlot();
+        return slot < 0 ? n : Math.max(n, slot + 1);
+    }
+
+    private boolean radarCard(int i) {
+        return radarSlot() == i;
+    }
+
+
+
+    private void drawRadarCard(Canvas c, int i) {
+        RectF base = cardRects[i];
+        if (base.right < 0 || base.left > getWidth()) return;
+        RadarOffers.Offer o = radarOffers.current();
+        if (o == null) return;
+        float v = cardFocus[i].value, scale = 1 + 0.05f * v;
+        float bw = base.width(), bh = base.height(), r = 18 * k;
+        float cx = base.centerX(), cy = base.centerY() - 6 * k * v;
+        cell.set(cx - bw * scale / 2, cy - bh * scale / 2,
+                cx + bw * scale / 2, cy + bh * scale / 2);
+        fill.setShader(null);
+        fill.setColor(tone(0xFFFFE5D0, 0xFF462B28));
+        c.drawRoundRect(cell, r, r, fill);
+        c.save();
+        android.graphics.Path clip = new android.graphics.Path();
+        clip.addRoundRect(cell, r, r, android.graphics.Path.Direction.CW);
+        c.clipPath(clip);
+        if (o.image != null && !o.image.isRecycled()) {
+            Bitmap bmp = o.image;
+            float destH = Math.max(100 * k, cell.height() - 158 * k);
+            float destW = cell.width();
+            float ratio = Math.max(destW / bmp.getWidth(), destH / bmp.getHeight());
+            float sw = destW / ratio, sh = destH / ratio;
+            int left = Math.max(0, Math.round((bmp.getWidth() - sw) / 2));
+            int top = Math.max(0, Math.round((bmp.getHeight() - sh) / 2));
+            Rect src = new Rect(left, top, Math.min(bmp.getWidth(), Math.round(left + sw)),
+                    Math.min(bmp.getHeight(), Math.round(top + sh)));
+            RectF dest = new RectF(cell.left, cell.top, cell.right, cell.top + destH);
+            c.drawBitmap(bmp, src, dest, bitmapPaint);
+        } else {
+            Paint mark = Ui.text(Ui.semibold, 45 * k, tone(0xFFBB4B19, 0xFFFFB27E));
+            mark.setTextAlign(Paint.Align.CENTER);
+            c.drawText("OFERTA", cell.centerX(), cell.centerY() - 25 * k, mark);
+        }
+        fill.setColor(0xEB161616);
+        c.drawRect(cell.left, cell.bottom - 158 * k, cell.right, cell.bottom, fill);
+        Paint heading = Ui.text(Ui.semibold, 21 * k, 0xFFFFAC70);
+        Paint product = Ui.text(Ui.semibold, 27 * k, 0xFFFFFFFF);
+        Paint detail = Ui.text(Ui.medium, 24 * k, 0xFFFFFFFF);
+        float x = cell.left + 16 * k, maxW = Math.max(20 * k, cell.width() - 32 * k);
+        c.drawText("PUBLICIDADE", x,
+                cell.bottom - 120 * k, heading);
+        fitPaint.set(product);
+        c.drawText(TextUtils.ellipsize(o.title, fitPaint, maxW, TextUtils.TruncateAt.END).toString(),
+                x, cell.bottom - 78 * k, product);
+        c.drawText(o.price != null ? o.price : "Conheça nossas ofertas",
+                x, cell.bottom - 37 * k, detail);
+        c.restore();
+        if (v > 0.01f) {
+            rim.setShader(null);
+            rim.setColor(0xFFFFA64B);
+            rim.setStrokeWidth(3.5f * k);
+            c.drawRoundRect(cell, r, r, rim);
+        }
+        if (base.left < 0 || base.left > (CONTENT_R - 100) * k) return;
+        fitPaint.set(lCardTitle);
+        c.drawText("Oferta no Radar", base.left, base.bottom + 46 * k, lCardTitle);
+        if (cardOpen[i].value > 0.02f) {
+            fitPaint.set(lCardMeta);
+            c.drawText("Publicidade · " + (o.demo ? "Demonstração" : "Pressione OK para acessar"),
+                    base.left, base.bottom + 80 * k, lCardMeta);
+        }
+    }
+
+    /** Native dialog uses the same bundled QR encoder as the original TMDB-key transfer. */
+    private void openRadarOffer() {
+        RadarOffers.Offer o = radarOffers.current();
+        if (o == null || !o.valid(System.currentTimeMillis())) return;
+        radarDialogOpen = true;
+        radarOffers.setFrozen(true);
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity)
+                .setTitle("Oferta no Radar · Publicidade")
+                .setMessage(o.title + "\n" + o.store
+                        + (o.price == null ? "" : "\n" + o.price)
+                        + "\nPreço e disponibilidade sujeitos a alteração."
+                        + (o.clickUrl == null ? "\nOferta demonstrativa: sem link para compra."
+                                : "\nEscaneie com o celular para acessar a loja."))
+                .setPositiveButton("Fechar", (dialog, which) -> dialog.dismiss());
+        if (o.clickUrl != null) {
+            try {
+                boolean[][] qr = Qr.encode(o.clickUrl);
+                int module = Math.max(4, 460 / (qr.length + 8));
+                int side = (qr.length + 8) * module;
+                int[] pixels = new int[side * side];
+                java.util.Arrays.fill(pixels, 0xFFFFFFFF);
+                for (int y = 0; y < qr.length; y++) for (int x = 0; x < qr.length; x++) {
+                    if (!qr[y][x]) continue;
+                    int px = (x + 4) * module, py = (y + 4) * module;
+                    for (int row = 0; row < module; row++)
+                        java.util.Arrays.fill(pixels, (py + row) * side + px,
+                                (py + row) * side + px + module, 0xFF000000);
+                }
+                Bitmap bitmap = Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888);
+                android.widget.ImageView image = new android.widget.ImageView(activity);
+                image.setImageBitmap(bitmap);
+                image.setAdjustViewBounds(true);
+                image.setPadding(28, 12, 28, 12);
+                b.setView(image);
+            } catch (RuntimeException ignored) {
+                radarDialogOpen = false;
+                return; // Invalid / too long to encode: never show an unsafe link.
+            }
+        }
+        android.app.AlertDialog dialog = b.create();
+        dialog.setOnDismissListener(d -> {
+            radarDialogOpen = false;
+            radarOffers.setFrozen(zone == Z_CARDS && radarCard(cardIndex));
+        });
+        try { dialog.show(); }
+        catch (RuntimeException error) { radarDialogOpen = false; }
+    }
+
     /**
      * The round buttons (Live TV, HDMI Inputs and Settings by default): icon-only glass circles (light by day, smoked at
      * night); the focused one turns white with a dark icon (the tvOS focus) and its name appears below it.
@@ -3280,23 +3445,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_SHELF:
                 // Up from an empty shelf too: move()'s older zones (the hero, the corner capsule) aren't drawn any more.
                 if (dy >= 0) return false;
-                if (cards.isEmpty()) {
+                if (visibleCardCount() == 0) {
                     if (!picksOn() && lightButtons.isEmpty()) return true;   // no tabs and no buttons above
                     zone = Z_TOP;
                     topIndex = picksOn() ? tab : 3;
                 } else {
                     zone = Z_CARDS;
-                    cardIndex = nearest(cardRects, cards.size(), shelf.isEmpty() ? w / 2f : tileRects[shelfIndex].centerX());
+                    cardIndex = nearest(cardRects, visibleCardCount(), shelf.isEmpty() ? w / 2f : tileRects[shelfIndex].centerX());
                 }
                 break;
             case Z_CARDS:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(cards.size() - 1, cardIndex + dx));
+                    int next = Math.max(0, Math.min(visibleCardCount() - 1, cardIndex + dx));
                     if (next == cardIndex) return true;
                     cardIndex = next;
                 } else if (dy < 0) {
                     zone = Z_TOP;
-                    topIndex = tab;     // as on Apple TV: moving up to the tabs focuses the selected tab
+                    topIndex = picksOn() ? tab : 3;  // when no TMDB key, tabs are hidden
                 } else {
                     zone = Z_SHELF;
                     if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[cardIndex].centerX());
@@ -3309,11 +3474,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
                 } else if (dy > 0) {
-                    if (cards.isEmpty()) {
+                    if (visibleCardCount() == 0) {
                         zone = Z_SHELF;
                     } else {
                         zone = Z_CARDS;
-                        cardIndex = nearest(cardRects, cards.size(), topRects[topIndex].centerX());
+                        cardIndex = nearest(cardRects, visibleCardCount(), topRects[topIndex].centerX());
                     }
                 } else if (topIndex < 3 && !lightButtons.isEmpty()) {
                     topIndex = 3;   // up from the tabs reaches the corner buttons without walking the row

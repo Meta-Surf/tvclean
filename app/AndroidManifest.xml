@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.freemytv"
-    android:versionCode="3"
-    android:versionName="1.2">
+    package="cloud.ofertanoradar.tvclean"
+    android:versionCode="10"
+    android:versionName="0.1.0-preview">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -16,7 +16,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Updates from GitHub's releases (Updates): Android's installer still asks before each one. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- TVClean previews never install application updates automatically. -->
 
     <!-- Android 11+: without this list the app can't "see" the other apps (getLeanbackLaunchIntentForPackage
          returns null). The shelf and streaming apps, the live TV apps and, through the <intent>, every TV app
@@ -91,8 +91,8 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
-        android:name=".App"
-        android:label="Free My TV"
+        android:name="io.freemytv.App"
+        android:label="TVClean"
         android:icon="@drawable/icon"
         android:banner="@drawable/banner"
         android:allowBackup="false"
@@ -100,12 +100,12 @@
 
         <!-- The app's icon opens the settings (switch between Free My TV and the original home screen). -->
         <activity
-            android:name=".SettingsActivity"
+            android:name="io.freemytv.SettingsActivity"
             android:process=":home"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:launchMode="singleTask"
-            android:taskAffinity="io.freemytv.settings"
+            android:taskAffinity="cloud.ofertanoradar.tvclean.settings"
             android:excludeFromRecents="true"
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
@@ -120,10 +120,10 @@
         <!-- The home screen. Its own process (:home): if it ever crashes, the safety net in the main process still
              works. It only becomes the TV's home screen in Free My TV mode (cmd package set-home-activity). -->
         <activity
-            android:name=".HomeActivity"
+            android:name="io.freemytv.HomeActivity"
             android:process=":home"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:launchMode="singleTask"
             android:taskAffinity=""
             android:stateNotNeeded="true"
@@ -143,23 +143,23 @@
         <!-- Fire TV: the same home screen opened as a regular app (no resumeWhilePausing, which leaves window focus on
              Amazon's paused launcher on Fire OS). -->
         <activity
-            android:name=".FireHomeActivity"
+            android:name="io.freemytv.FireHomeActivity"
             android:process=":home"
             android:exported="false"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:launchMode="singleTask"
-            android:taskAffinity="io.freemytv.settings"
+            android:taskAffinity="cloud.ofertanoradar.tvclean.settings"
             android:excludeFromRecents="true"
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
             android:theme="@style/FreeMyTV.Home" />
 
         <service
-            android:name=".Screensaver"
+            android:name="io.freemytv.Screensaver"
             android:process=":home"
             android:enabled="@bool/dream_in_home"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:permission="android.permission.BIND_DREAM_SERVICE">
             <intent-filter>
                 <action android:name="android.service.dreams.DreamService" />
@@ -169,10 +169,10 @@
 
         <!-- The same screensaver on Android 11 to 12L, in the main process (see ScreensaverAlone). -->
         <service
-            android:name=".ScreensaverAlone"
+            android:name="io.freemytv.ScreensaverAlone"
             android:enabled="@bool/dream_alone"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:permission="android.permission.BIND_DREAM_SERVICE">
             <intent-filter>
                 <action android:name="android.service.dreams.DreamService" />
@@ -182,17 +182,17 @@
 
         <!-- The switches, as background jobs in the main process. -->
         <service
-            android:name=".ModeJob"
+            android:name="io.freemytv.ModeJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- The remote's app buttons from inside any app (Settings > Remote Buttons). Its own process: the system waits for it on
              every key, so the home screen must never be able to slow it down. -->
         <service
-            android:name=".RemoteKeyService"
+            android:name="io.freemytv.RemoteKeyService"
             android:process=":keys"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -205,23 +205,23 @@
         <!-- tools/photos.py writes photos here where adb can't reach the app's external folder (Android 11, Fire OS 8);
              only adb's shell may write (PhotoInbox checks). -->
         <provider
-            android:name=".PhotoInbox"
-            android:authorities="io.freemytv.photos"
+            android:name="io.freemytv.PhotoInbox"
+            android:authorities="cloud.ofertanoradar.tvclean.photos"
             android:exported="true" />
 
         <!-- The sleep timer's minutes left over any app, while the timer runs. A process of its own: a foreground
              service in :home would keep the whole home screen in memory under the app in front. -->
         <service
-            android:name=".SleepOverlay"
+            android:name="io.freemytv.SleepOverlay"
             android:process=":sleep"
             android:exported="false" />
 
         <!-- Lets the home screen and the screensaver read what apps are playing (their media sessions); it unbinds itself
              at once, so no process stays up for it. -->
         <service
-            android:name=".NowPlaying"
+            android:name="io.freemytv.NowPlaying"
             android:exported="true"
-            android:label="Free My TV"
+            android:label="TVClean"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
@@ -229,7 +229,7 @@
         </service>
 
         <receiver
-            android:name=".HomeReceiver"
+            android:name="io.freemytv.HomeReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
