@@ -67,7 +67,8 @@ final class RadarOffers {
     private List<Offer> offers = new ArrayList<>();
     private int active;
     private long fetchAt, switchAt;
-    private boolean fetching, closed;
+    private boolean fetching, closed, frozen;
+    private List<Offer> pending;
 
     RadarOffers(Runnable changed) { this.changed = changed; }
 
@@ -81,9 +82,17 @@ final class RadarOffers {
      * Called every 15 seconds on main thread.
      * Freeze the displayed offer when the focus is on the third card or its QR dialog is open.
      */
+    void setFrozen(boolean value) { frozen = value; }
+
     void tick(boolean frozen) {
         if (closed) return;
+        this.frozen = frozen;
         long now = System.currentTimeMillis();
+        if (!frozen && pending != null) {
+            List<Offer> next = pending;
+            pending = null;
+            apply(next);
+        }
         if (!frozen && offers.size() > 1 && now - switchAt >= ROTATE_MS) {
             for (int n = 0; n < offers.size(); n++) {
                 active = (active + 1) % offers.size();
@@ -117,18 +126,31 @@ final class RadarOffers {
                     if (closed) return;
                     fetching = false;
                     if (result == null) { changed.run(); return; }
-                    // Preserve the displayed offer while the card is focused or the QR dialog is open.
-                    String selected = current() == null ? null : current().id;
-                    offers = result;
-                    active = 0;
-                    if (selected != null) for (int i = 0; i < offers.size(); i++) {
-                        if (offers.get(i).id.equals(selected)) { active = i; break; }
-                    }
-                    changed.run();
-                    fetchImage();
+                    if (frozen) pending = result;
+                    else apply(result);
                 });
             });
         }
+    }
+
+    private void apply(List<Offer> next) {
+        Offer was = current();
+        String selected = was == null ? null : was.id;
+        for (Offer candidate : next) for (Offer previous : offers) {
+            if (candidate.id.equals(previous.id)) {
+                candidate.image = previous.image;
+                break;
+            }
+        }
+        offers = next;
+        active = 0;
+        if (selected != null) for (int i = 0; i < offers.size(); i++) {
+            if (offers.get(i).id.equals(selected)) { active = i; break; }
+        }
+        if (switchAt == 0 || current() == null || selected == null
+                || !selected.equals(current().id)) switchAt = System.currentTimeMillis();
+        changed.run();
+        fetchImage();
     }
 
     void close() {
