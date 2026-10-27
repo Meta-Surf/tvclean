@@ -19,7 +19,7 @@ Os workflows do upstream não foram importados; CI, releases e assinatura serão
 - Cache local com expiração explícita; feed nunca deve interferir nas funcionalidades do launcher.
 
 ## Contrato do feed HTTP
-GET https://tv.ofertanoradar.cloud/api/v1/offers/current
+GET https://midia.ofertanoradar.cloud/tv/api/v1/offers/current
 Content-Type: application/json; charset=utf-8
 Cache-Control: public, max-age=60
 
