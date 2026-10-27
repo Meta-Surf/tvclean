@@ -1,5 +1,5 @@
-# Bootstrap do TVClean sem depender de computador local.
-# O repositório de destino deve estar recém-criado e sem código próprio.
+# Importa Free My TV sem computador local.
+# O repositório de destino TVClean permanece independente dos workflows upstream.
 name: Importar base Free My TV
 
 on:
@@ -17,13 +17,13 @@ jobs:
     if: github.repository == 'Meta-Surf/tvclean'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout do repositório TVClean
+      - name: Checkout TVClean
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Importar upstream preservando histórico e licença
+      - name: Importar upstream preservando autoria, licença e histórico
         shell: bash
         run: |
           set -euo pipefail
@@ -32,11 +32,14 @@ jobs:
           git remote add upstream https://github.com/simbasjungles/free-my-tv.git
           git fetch upstream main
           if [ -f app/src/io/freemytv/HomeView.java ]; then
-            echo "A base já foi importada; operação idempotente."
+            echo "Base já importada."
             exit 0
           fi
-          git merge --allow-unrelated-histories --no-edit --no-ff upstream/main \
-            -m "Import Free My TV upstream with full history (MIT)"
+          # Evita herdar os workflows externos, para respeitar o isolamento
+          # e a restrição de workflow permissions do token GitHub Actions.
+          git merge --allow-unrelated-histories --no-commit --no-ff upstream/main
+          git rm -f .github/workflows/check.yml .github/workflows/pages.yml
+          git commit -m "Import Free My TV source and history (MIT, no upstream workflows)"
           test -f LICENSE
           test -f app/src/io/freemytv/HomeView.java
           git push origin HEAD:main
