@@ -110,6 +110,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Recs recs;
     private final NowPlaying.Watch playing;
     private final Click click;
+    private final RadarOffers radarOffers;
+    private boolean radarDialogOpen;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences ui;
     private final TvInputManager tvInputs;
@@ -362,6 +364,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             playing.start();   // the listener allowed after the screen showed (a no-op once watching)
             data.refreshIfStale();
             recs.refreshIfStale();
+            radarOffers.tick(radarDialogOpen || (tab == 0 && zone == Z_CARDS && cardIndex == 2));
             checkNotices();
             updatePalette();
             checkNight(true);
@@ -378,6 +381,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs = Recs.get(a);
         playing = new NowPlaying.Watch(a, this::onPlaying);
         click = new Click(a);
+        radarOffers = new RadarOffers(() -> {
+            if (!running) return;
+            heroDirty = true;
+            wake();
+            spoken.focusMoved();
+        });
         shelfVisible = HomeApps.shelfVisible(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
         tvInputs = (TvInputManager) a.getSystemService(Context.TV_INPUT_SERVICE);
@@ -447,6 +456,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs.addListener(this);
         data.refreshIfStale();
         recs.refreshIfStale();
+        radarOffers.tick(false);
         Photos.importInbox(getContext(), ownReady);   // photos a computer just sent
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
@@ -489,6 +499,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     void destroy() {
         pause();
+        radarOffers.close();
         if (launcherApps != null) launcherApps.unregisterCallback(packages);
         click.release();
     }
@@ -2477,6 +2488,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
         } else if (zone == Z_CARDS) {
+            if (radarCard(cardIndex)) {
+                click.open();
+                openRadarOffer();
+                return;
+            }
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
             if (p == null || p.pkg == null) return;
             it = HomeApps.app(p.pkg, Recs.serviceName(p), p.link);
@@ -2775,7 +2791,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_TOP:
                 if (i >= 3) return label(lightButtons, i - 3);
                 return Ui.trf("{name}, tab {i} of {n}", "name", tabs()[i], "i", i + 1, "n", 3);
-            case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
+            case Z_CARDS: return radarCard(i) ? "Publicidade. Oferta no Radar. " + radarOffers.current().title + ". Pressione OK para detalhes." : i < cards.size() ? pickText(cards.get(i)) : "";
             case Z_SHELF:
                 if (reordering && i == shelfIndex) {
                     return Ui.trf("Moving {app}, position {n} of {total}",
@@ -3163,6 +3179,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * card, genre · runtime · service).
      */
     private void drawLightCard(Canvas c, int i) {
+        if (radarCard(i)) {
+            drawRadarCard(c, i);
+            return;
+        }
         RectF base = cardRects[i];
         if (base.right < 0 || base.left > getWidth()) return;   // slid off screen
         Recs.Pick p = i < cards.size() ? cards.get(i) : null;
@@ -3234,6 +3254,121 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(TextUtils.ellipsize(p.meta, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
             lCardMeta.setAlpha(a);
         }
+    }
+
+
+    /** Only the third Explore card can be a sponsored offer. Other tabs retain their original picks. */
+    private boolean radarCard(int i) {
+        return i == 2 && tab == 0 && picksOn() && cards.size() >= 3
+                && radarOffers.current() != null;
+    }
+
+    private void drawRadarCard(Canvas c, int i) {
+        RectF base = cardRects[i];
+        if (base.right < 0 || base.left > getWidth()) return;
+        RadarOffers.Offer o = radarOffers.current();
+        if (o == null) return;
+        float v = cardFocus[i].value, scale = 1 + 0.05f * v;
+        float bw = base.width(), bh = base.height(), r = 18 * k;
+        float cx = base.centerX(), cy = base.centerY() - 6 * k * v;
+        cell.set(cx - bw * scale / 2, cy - bh * scale / 2,
+                cx + bw * scale / 2, cy + bh * scale / 2);
+        fill.setShader(null);
+        fill.setColor(tone(0xFFFFE5D0, 0xFF462B28));
+        c.drawRoundRect(cell, r, r, fill);
+        c.save();
+        android.graphics.Path clip = new android.graphics.Path();
+        clip.addRoundRect(cell, r, r, android.graphics.Path.Direction.CW);
+        c.clipPath(clip);
+        if (o.image != null && !o.image.isRecycled()) {
+            Bitmap bmp = o.image;
+            float destH = Math.max(100 * k, cell.height() - 158 * k);
+            float destW = cell.width();
+            float ratio = Math.max(destW / bmp.getWidth(), destH / bmp.getHeight());
+            float sw = destW / ratio, sh = destH / ratio;
+            int left = Math.max(0, Math.round((bmp.getWidth() - sw) / 2));
+            int top = Math.max(0, Math.round((bmp.getHeight() - sh) / 2));
+            Rect src = new Rect(left, top, Math.min(bmp.getWidth(), Math.round(left + sw)),
+                    Math.min(bmp.getHeight(), Math.round(top + sh)));
+            RectF dest = new RectF(cell.left, cell.top, cell.right, cell.top + destH);
+            c.drawBitmap(bmp, src, dest, bitmapPaint);
+        } else {
+            Paint mark = Ui.text(Ui.semibold, 45 * k, tone(0xFFBB4B19, 0xFFFFB27E));
+            mark.setTextAlign(Paint.Align.CENTER);
+            c.drawText("OFERTA", cell.centerX(), cell.centerY() - 25 * k, mark);
+        }
+        fill.setColor(0xEB161616);
+        c.drawRect(cell.left, cell.bottom - 158 * k, cell.right, cell.bottom, fill);
+        Paint heading = Ui.text(Ui.semibold, 21 * k, 0xFFFFAC70);
+        Paint product = Ui.text(Ui.semibold, 27 * k, 0xFFFFFFFF);
+        Paint detail = Ui.text(Ui.medium, 24 * k, 0xFFFFFFFF);
+        float x = cell.left + 16 * k, maxW = Math.max(20 * k, cell.width() - 32 * k);
+        c.drawText("PUBLICIDADE · OFERTA NO RADAR", x,
+                cell.bottom - 120 * k, heading);
+        fitPaint.set(product);
+        c.drawText(TextUtils.ellipsize(o.title, fitPaint, maxW, TextUtils.TruncateAt.END).toString(),
+                x, cell.bottom - 78 * k, product);
+        c.drawText(o.price != null ? o.price : "Conheça nossas ofertas",
+                x, cell.bottom - 37 * k, detail);
+        c.restore();
+        if (v > 0.01f) {
+            rim.setShader(null);
+            rim.setColor(0xFFFFA64B);
+            rim.setStrokeWidth(3.5f * k);
+            c.drawRoundRect(cell, r, r, rim);
+        }
+        if (base.left < 0 || base.left > (CONTENT_R - 100) * k) return;
+        fitPaint.set(lCardTitle);
+        c.drawText("Oferta no Radar", base.left, base.bottom + 46 * k, lCardTitle);
+        if (cardOpen[i].value > 0.02f) {
+            fitPaint.set(lCardMeta);
+            c.drawText("Publicidade · " + (o.demo ? "Demonstração" : "Pressione OK para acessar"),
+                    base.left, base.bottom + 80 * k, lCardMeta);
+        }
+    }
+
+    /** Native dialog uses the same bundled QR encoder as the original TMDB-key transfer. */
+    private void openRadarOffer() {
+        RadarOffers.Offer o = radarOffers.current();
+        if (o == null || !o.valid(System.currentTimeMillis())) return;
+        radarDialogOpen = true;
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity)
+                .setTitle("Oferta no Radar · Publicidade")
+                .setMessage(o.title + "\\n" + o.store
+                        + (o.price == null ? "" : "\\n" + o.price)
+                        + "\\nPreço e disponibilidade sujeitos a alteração."
+                        + (o.clickUrl == null ? "\\nOferta demonstrativa: sem link para compra."
+                                : "\\nEscaneie com o celular para acessar a loja."))
+                .setPositiveButton("Fechar", (dialog, which) -> dialog.dismiss());
+        if (o.clickUrl != null) {
+            try {
+                boolean[][] qr = Qr.encode(o.clickUrl);
+                int module = Math.max(4, 460 / (qr.length + 8));
+                int side = (qr.length + 8) * module;
+                int[] pixels = new int[side * side];
+                java.util.Arrays.fill(pixels, 0xFFFFFFFF);
+                for (int y = 0; y < qr.length; y++) for (int x = 0; x < qr.length; x++) {
+                    if (!qr[y][x]) continue;
+                    int px = (x + 4) * module, py = (y + 4) * module;
+                    for (int row = 0; row < module; row++)
+                        java.util.Arrays.fill(pixels, (py + row) * side + px,
+                                (py + row) * side + px + module, 0xFF000000);
+                }
+                Bitmap bitmap = Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888);
+                android.widget.ImageView image = new android.widget.ImageView(activity);
+                image.setImageBitmap(bitmap);
+                image.setAdjustViewBounds(true);
+                image.setPadding(28, 12, 28, 12);
+                b.setView(image);
+            } catch (RuntimeException ignored) {
+                radarDialogOpen = false;
+                return; // Invalid / too long to encode: never show an unsafe link.
+            }
+        }
+        android.app.AlertDialog dialog = b.create();
+        dialog.setOnDismissListener(d -> radarDialogOpen = false);
+        try { dialog.show(); }
+        catch (RuntimeException error) { radarDialogOpen = false; }
     }
 
     /**
